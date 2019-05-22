@@ -1,2 +1,2 @@
-def test():
-    print('Hello world')
+def export( context, filepath ):
+    print('Output to: ' + filepath)

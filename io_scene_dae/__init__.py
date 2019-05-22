@@ -18,8 +18,14 @@ class DAEExporter(bpy.types.Operator):
     bl_label = 'Collada Exporte'    # display name in the interface.
     bl_options = {'PRESET'}  # enable undo for the operator.
     
+    filepath = bpy.props.StringProperty(subtype="FILE_PATH")
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+    
     def execute(self, context):        # execute() is called by blender when running the operator.
-        collada_exporter.test() 
+        collada_exporter.export(context, self.filepath)
         return {'FINISHED'}            # this lets blender know the operator finished successfully.
 
 def menu_func(self, context):
