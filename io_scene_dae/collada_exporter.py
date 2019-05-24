@@ -1,23 +1,28 @@
 import xml.etree.ElementTree as ET
 
+def loadLibGeometries( lib_geometries ):
+    ET.SubElement(lib_geometries, 'mesh')
+    print("TODO load geometries.")
+
+def loadLibVisualScene( lib_visual_scene ):
+    ET.SubElement(lib_visual_scene, 'node')
+    print("TODO load visual scene.")
+
 def prettify( root ):
-    countstack = []
+    lvstack = []
     elmstack = []
+    lvstack.append(0)
     elmstack.append(root)
     while len(elmstack) != 0:
-        if(len(countstack) != 0):
-            countstack[-1] -= 1
-            if(countstack[-1] == 0):
-                countstack.pop()
+        lv = lvstack.pop()
         p = elmstack.pop()
-        if(len(p) == 0):
-            p.tail = '\n' + len(countstack)*'\t'
-        else:
+        if(len(p) != 0 ):
+            p.text = '\n' + (lv + 1) * '\t'
             for c in reversed(p):
+                c.tail = '\n' + (lv + 1) * '\t'
                 elmstack.append(c)
-            p.tail = '\n' + len(countstack) * '\t'
-            countstack.append(len(p))
-            p.text = '\n' + len(countstack) * '\t'
+                lvstack.append(lv + 1)
+            p[-1].tail = '\n' + lv * '\t'
 
 def export( context, filepath ):
     collada = ET.Element('COLLADA')
@@ -29,6 +34,9 @@ def export( context, filepath ):
     lib_animations = ET.SubElement(collada, 'library_animations')
     lib_controllers = ET.SubElement(collada, 'library_controllers')
     lib_visual_sence = ET.SubElement(collada, 'library_visual_scenes')
+    
+    loadLibGeometries(lib_geometries)
+    loadLibVisualScene(lib_visual_sence)
     
     prettify(collada)
     tree = ET.ElementTree(collada)
