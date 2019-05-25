@@ -1,12 +1,39 @@
+import bpy
+import numpy
 import xml.etree.ElementTree as ET
+
+def loadNodeMesh(obj, domNode ):
+    matWorld = obj.matrix_world.copy()
+    matWorld.transpose()
+    vals = numpy.asarray(matWorld).ravel()
+    matText = ' '.join(str(x) for x in vals )
+    matNode = ET.SubElement(domNode, 'matrix')
+    matNode.text = matText
+    
+    mesh = obj.data
+    print(mesh.name)
+    instGeo = ET.SubElement(domNode, 'instance_geometry')
+    instGeo.set('url', mesh.name)
 
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
     print("TODO load geometries.")
 
 def loadLibVisualScene( lib_visual_scene ):
-    ET.SubElement(lib_visual_scene, 'node')
-    print("TODO load visual scene.")
+    objscene = bpy.data.scenes[0]
+    domScene = ET.SubElement(lib_visual_scene, 'visual_scene')
+    objs = objscene.objects
+    for obj in objs:
+        objName = obj.name
+        objType = obj.type
+        domNode = ET.SubElement(domScene, 'node')
+        domNode.set('id', objName)
+        domNode.set('obj_type', objType)
+        domNode.set('type', 'NODE')   
+        if(obj.type == 'MESH'):
+            loadNodeMesh(obj, domNode)
+        elif(obj.type == 'ARMATURE'):
+            print('TODO: handle armature object')
 
 def prettify( root ):
     lvstack = []
