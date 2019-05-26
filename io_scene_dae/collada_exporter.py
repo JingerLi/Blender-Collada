@@ -2,6 +2,9 @@ import bpy
 import numpy
 import xml.etree.ElementTree as ET
 
+mesh_targets = {}
+controller_targets = {}
+
 def matrixToStrList(matrix, transpose):
     mat = matrix.copy()
     if(transpose):
@@ -56,10 +59,20 @@ def loadNodeMesh(obj, domNode ):
     matNode.text = matText
     
     mesh = obj.data
-    print(mesh.name)
+    mesh_targets[mesh.name] = mesh
     instGeo = ET.SubElement(domNode, 'instance_geometry')
     instGeo.set('url', '#' + mesh.name)
+    
+    for m in obj.modifiers:
+        name = obj.name + '.skin'
+        instCtrl = ET.SubElement(domNode, 'instance_controller')
+        instCtrl.set('url',  '#' + name)
+        controller_targets[name] = m
 
+def loadLibControllers( lib_controllers ):
+    print("TODO load controllers.")
+    ET.SubElement(lib_controllers, 'controller')
+        
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
     print("TODO load geometries.")
@@ -109,6 +122,7 @@ def export( context, filepath ):
     
     loadLibGeometries(lib_geometries)
     loadLibVisualScene(lib_visual_sence)
+    loadLibControllers(lib_controllers)
     
     prettify(collada)
     tree = ET.ElementTree(collada)
