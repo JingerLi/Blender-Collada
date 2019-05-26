@@ -2,18 +2,63 @@ import bpy
 import numpy
 import xml.etree.ElementTree as ET
 
-def loadNodeMesh(obj, domNode ):
-    matWorld = obj.matrix_world.copy()
-    matWorld.transpose()
-    vals = numpy.asarray(matWorld).ravel()
+def matrixToStrList(matrix, transpose):
+    mat = matrix.copy()
+    if(transpose):
+        mat.transpose()
+    vals = numpy.asarray(mat).ravel()
     matText = ' '.join(str(x) for x in vals )
+    return matText
+
+def loadBonesTree( root, domNode, namebase ):
+    boneStack = []
+    domStack = []
+    boneStack.append(root)
+    domStack.append(domNode)
+    while len(boneStack) != 0:
+        cb = boneStack.pop()
+        dom = domStack.pop()
+        name = cb.name
+        dom.set('id', namebase + '.' + name)
+        dom.set('sid', name)
+        dom.set('type', 'JOINT')
+        
+        matrix = ET.SubElement(dom, 'matrix')
+        matText = matrixToStrList(cb.matrix_local, True)
+        matrix.text = matText
+        for c in cb.children:
+            dc = ET.SubElement(dom, 'node')
+            boneStack.append(c)
+            domStack.append(dc)
+    
+def loadNodeArmature(obj, domNode):
+    print('type: ' + obj.name)
+    armature = obj.data
+
+    matText = matrixToStrList(obj.matrix_world, True)
+    matNode = ET.SubElement(domNode, 'matrix')
+    matNode.text = matText
+    
+    roots = []
+    for b in armature.bones:
+        if(b.parent == None):
+            roots.append(b)
+    for r in roots:
+        boneRoot = ET.SubElement(domNode, 'node')
+        loadBonesTree(r, boneRoot, obj.name)
+    
+    instCtrl = ET.SubElement(domNode, 'instance_controller')
+    instCtrl.set('url', '#' + 'TBD')
+    
+def loadNodeMesh(obj, domNode ):
+    matText = matrixToStrList(obj.matrix_world, True)
     matNode = ET.SubElement(domNode, 'matrix')
     matNode.text = matText
     
     mesh = obj.data
     print(mesh.name)
     instGeo = ET.SubElement(domNode, 'instance_geometry')
-    instGeo.set('url', mesh.name)
+    instGeo.set('url', '#' + mesh.name)
 
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
@@ -33,7 +78,7 @@ def loadLibVisualScene( lib_visual_scene ):
         if(obj.type == 'MESH'):
             loadNodeMesh(obj, domNode)
         elif(obj.type == 'ARMATURE'):
-            print('TODO: handle armature object')
+            loadNodeArmature(obj, domNode)
 
 def prettify( root ):
     lvstack = []
