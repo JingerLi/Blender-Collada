@@ -1,9 +1,40 @@
 import bpy
 import numpy
+from enum import Enum
 import xml.etree.ElementTree as ET
 
 mesh_targets = {}
 controller_targets = {}
+
+class SourceType(Enum):
+    string = 0
+    float = 1
+    float4x4 = 2
+
+def buildSource(domNode, strdata, count, id, dataName, type=SourceType.float):
+    sourceNode = ET.SubElement(domNode, 'source')
+    sourceNode.set('id', id)
+    data = None
+    if(type == SourceType.string):
+        data = ET.SubElement(sourceNode, 'Name_array')
+    else:
+        data = ET.SubElement(sourceNode, 'float_array')
+    data.set('id', id + '.data')
+    data.set('count', str(count))
+    data.text = strdata
+    
+    techcom = ET.SubElement(sourceNode, 'technique_common')
+    accessor = ET.SubElement(techcom, 'accessor')
+    accessor.set('source', '#' + id + '.data')
+    accessor.set('count', str(count))
+    stride = '1'
+    if(type == SourceType.float4x4):
+        stride = '16'
+    accessor.set('stride', stride)
+    
+    param = ET.SubElement(accessor, 'param')
+    param.set('name', dataName)
+    param.set('type', type.name)
 
 def matrixToStrList(matrix, transpose):
     mat = matrix.copy()
@@ -50,9 +81,6 @@ def loadNodeArmature(obj, domNode):
         boneRoot = ET.SubElement(domNode, 'node')
         loadBonesTree(r, boneRoot, obj.name)
     
-    instCtrl = ET.SubElement(domNode, 'instance_controller')
-    instCtrl.set('url', '#' + 'TBD')
-    
 def loadNodeMesh(obj, domNode ):
     matText = matrixToStrList(obj.matrix_world, True)
     matNode = ET.SubElement(domNode, 'matrix')
@@ -64,15 +92,33 @@ def loadNodeMesh(obj, domNode ):
     instGeo.set('url', '#' + mesh.name)
     
     for m in obj.modifiers:
-        name = obj.name + '.skin'
+        id = m.name + '.' + obj.name + '.skin'
         instCtrl = ET.SubElement(domNode, 'instance_controller')
-        instCtrl.set('url',  '#' + name)
-        controller_targets[name] = m
+        instCtrl.set('url',  '#' + id)
+        ctrlMeta = { 'mesh': mesh,  'modifier': m}
+        controller_targets[id] = ctrlMeta
 
 def loadLibControllers( lib_controllers ):
-    print("TODO load controllers.")
-    ET.SubElement(lib_controllers, 'controller')
+    for c in controller_targets:
+        meta = controller_targets[c]
+        mesh = meta['mesh']
+        modifier = meta['modifier']
+        armature = bpy.data.objects[modifier.name]
+         
+        ctrl = ET.SubElement(lib_controllers, 'controller')
+        ctrl.set('id', c)
+        ctrl.set('name', modifier.name)
         
+        skin = ET.SubElement(ctrl, 'skin')
+        skin.set('source', '#' + mesh.name)
+        
+        bsmat = ET.SubElement(skin, 'bind_shape_matrix')
+        bsmat.text = matrixToStrList(armature.matrix_world, True)
+        
+        bones = armature.data.bones
+        bonesNameList = ' '.join( b.name for b in bones )
+        buildSource(skin, bonesNameList, len(bones), c + '.joints', 'JOINT', SourceType.string)
+
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
     print("TODO load geometries.")
