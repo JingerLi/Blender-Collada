@@ -58,7 +58,7 @@ def loadBonesTree( root, domNode, namebase ):
         dom.set('type', 'JOINT')
         
         matrix = ET.SubElement(dom, 'matrix')
-        matText = matrixToStrList(cb.matrix_local, True)
+        matText = matrixToStrList(cb.matrix, True)
         matrix.text = matText
         for c in cb.children:
             dc = ET.SubElement(dom, 'node')
@@ -68,18 +68,22 @@ def loadBonesTree( root, domNode, namebase ):
 def loadNodeArmature(obj, domNode):
     print('type: ' + obj.name)
     armature = obj.data
-
+    posePosition = armature.pose_position
+    armature.pose_position = 'REST'
+        
     matText = matrixToStrList(obj.matrix_world, True)
     matNode = ET.SubElement(domNode, 'matrix')
     matNode.text = matText
     
     roots = []
-    for b in armature.bones:
+    pose = obj.pose
+    for b in pose.bones:
         if(b.parent == None):
             roots.append(b)
     for r in roots:
         boneRoot = ET.SubElement(domNode, 'node')
         loadBonesTree(r, boneRoot, obj.name)
+    armature.pose_position = posePosition
     
 def loadNodeMesh(obj, domNode ):
     matText = matrixToStrList(obj.matrix_world, True)
@@ -102,20 +106,20 @@ def loadLibControllers( lib_controllers ):
     for c in controller_targets:
         meta = controller_targets[c]
         mesh = meta['mesh']
-        modifier = meta['modifier']
-        armature = bpy.data.objects[modifier.name]
+        obj = meta['modifier'].object
+        armature = obj.data
          
         ctrl = ET.SubElement(lib_controllers, 'controller')
         ctrl.set('id', c)
-        ctrl.set('name', modifier.name)
+        ctrl.set('name', obj.name)
         
         skin = ET.SubElement(ctrl, 'skin')
         skin.set('source', '#' + mesh.name)
         
         bsmat = ET.SubElement(skin, 'bind_shape_matrix')
-        bsmat.text = matrixToStrList(armature.matrix_world, True)
+        bsmat.text = matrixToStrList(obj.matrix_world, True)
         
-        bones = armature.data.bones
+        bones = obj.data.bones
         bonesNameList = ' '.join( b.name for b in bones )
         buildSource(skin, bonesNameList, len(bones), c + '.joints', 'JOINT', SourceType.string)
 
