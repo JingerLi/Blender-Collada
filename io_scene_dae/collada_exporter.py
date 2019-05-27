@@ -26,11 +26,11 @@ def buildSource(domNode, strdata, count, id, dataName, type=SourceType.float):
     techcom = ET.SubElement(sourceNode, 'technique_common')
     accessor = ET.SubElement(techcom, 'accessor')
     accessor.set('source', '#' + id + '.data')
-    accessor.set('count', str(count))
-    stride = '1'
+    stride = 1
     if(type == SourceType.float4x4):
-        stride = '16'
-    accessor.set('stride', stride)
+        stride = 16
+    accessor.set('count', str(int(count/stride)))
+    accessor.set('stride', str(stride))
     
     param = ET.SubElement(accessor, 'param')
     param.set('name', dataName)
@@ -119,19 +119,16 @@ def loadLibControllers( lib_controllers ):
         bsmat = ET.SubElement(skin, 'bind_shape_matrix')
         bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
         
-        bones = obj.data.bones
+        bones = obj.pose.bones
         bonesNameList = ' '.join( b.name for b in bones )
         buildSource(skin, bonesNameList, len(bones), c + '.joints', 'JOINT', SourceType.string)
-        
         boneMats = []
         for b in bones:
             boneMatrix = b.matrix.copy()
             boneMatrix.inverted()
             boneMats.append(matrixToStrList(boneMatrix, True))
         boneMatrixList = ' '.join( str for str in boneMats )
-        print(boneMatrixList)
-            
-    
+        buildSource(skin, boneMatrixList, len(bones) * 16, c + '.inverse.bind.matrix', 'TRANSFORM', SourceType.float4x4)            
 
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
