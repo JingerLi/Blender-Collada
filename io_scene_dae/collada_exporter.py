@@ -36,8 +36,7 @@ def buildSource(domNode, strdata, count, id, dataName, type=SourceType.float):
     param.set('name', dataName)
     param.set('type', type.name)
 
-def matrixToStrList(matrix, transpose):
-    mat = matrix.copy()
+def matrixToStrList(mat, transpose):
     if(transpose):
         mat.transpose()
     vals = numpy.asarray(mat).ravel()
@@ -58,8 +57,9 @@ def loadBonesTree( root, domNode, namebase ):
         dom.set('type', 'JOINT')
         
         matrix = ET.SubElement(dom, 'matrix')
-        matText = matrixToStrList(cb.matrix, True)
+        matText = matrixToStrList(cb.matrix_basis.copy(), True)
         matrix.text = matText
+                
         for c in cb.children:
             dc = ET.SubElement(dom, 'node')
             boneStack.append(c)
@@ -71,7 +71,7 @@ def loadNodeArmature(obj, domNode):
     posePosition = armature.pose_position
     armature.pose_position = 'REST'
         
-    matText = matrixToStrList(obj.matrix_world, True)
+    matText = matrixToStrList(obj.matrix_world.copy(), True)
     matNode = ET.SubElement(domNode, 'matrix')
     matNode.text = matText
     
@@ -86,7 +86,7 @@ def loadNodeArmature(obj, domNode):
     armature.pose_position = posePosition
     
 def loadNodeMesh(obj, domNode ):
-    matText = matrixToStrList(obj.matrix_world, True)
+    matText = matrixToStrList(obj.matrix_world.copy(), True)
     matNode = ET.SubElement(domNode, 'matrix')
     matNode.text = matText
     
@@ -117,11 +117,21 @@ def loadLibControllers( lib_controllers ):
         skin.set('source', '#' + mesh.name)
         
         bsmat = ET.SubElement(skin, 'bind_shape_matrix')
-        bsmat.text = matrixToStrList(obj.matrix_world, True)
+        bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
         
         bones = obj.data.bones
         bonesNameList = ' '.join( b.name for b in bones )
         buildSource(skin, bonesNameList, len(bones), c + '.joints', 'JOINT', SourceType.string)
+        
+        boneMats = []
+        for b in bones:
+            boneMatrix = b.matrix.copy()
+            boneMatrix.inverted()
+            boneMats.append(matrixToStrList(boneMatrix, True))
+        boneMatrixList = ' '.join( str for str in boneMats )
+        print(boneMatrixList)
+            
+    
 
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
