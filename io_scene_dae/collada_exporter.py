@@ -118,17 +118,67 @@ def loadLibControllers( lib_controllers ):
         
         bsmat = ET.SubElement(skin, 'bind_shape_matrix')
         bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
+        joints = ET.SubElement(skin, 'joints')
         
         bones = obj.pose.bones
         bonesNameList = ' '.join( b.name for b in bones )
-        buildSource(skin, bonesNameList, len(bones), c + '.joints', 'JOINT', SourceType.string)
+        sourceName_0 = c + '.joints'
+        buildSource(skin, bonesNameList, len(bones), sourceName_0, 'JOINT', SourceType.string)
+        inputNameList = ET.SubElement(joints, 'input')
+        inputNameList.set('source', '#' + sourceName_0)
+        inputNameList.set('semantic', 'JOINT')
+        
         boneMats = []
         for b in bones:
             boneMatrix = b.matrix.copy()
             boneMatrix.inverted()
             boneMats.append(matrixToStrList(boneMatrix, True))
         boneMatrixList = ' '.join( str for str in boneMats )
-        buildSource(skin, boneMatrixList, len(bones) * 16, c + '.inverse.bind.matrix', 'TRANSFORM', SourceType.float4x4)            
+        sourceName_1 = c + '.inverse.bind.matrix'
+        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, 'TRANSFORM', SourceType.float4x4)
+        inputIBMList = ET.SubElement(joints, 'input')
+        inputIBMList.set('source', '#' + sourceName_1)
+        inputIBMList.set('semantic', 'INV_BIND_MATRIX')
+
+        weightDictionary = {}
+        weights = []
+        vcount = []
+        v = []
+        vertices = mesh.vertices
+        for vert in vertices:
+            vcount.append(len(vert.groups))
+            for g in vert.groups:
+                if( g.weight not in weightDictionary ):
+                    weightDictionary[g.weight] = len(weights)
+                    weights.append(g.weight)
+                weightIndex = weightDictionary[g.weight]
+                v.append(g.group)
+                v.append(weightIndex)
+                
+        sourceName_2 = c + '.skin.weights'
+        weightsStr = ' '.join( str(w) for w in weights)
+        buildSource(skin, weightsStr, len(weights), sourceName_2, 'WEIGHT', SourceType.float)
+        
+        vertexWeightDom = ET.SubElement(skin, 'vertex_weights')
+        vertexWeightDom.set('count', str(len(vcount)))
+        inputJoints = ET.SubElement(vertexWeightDom, 'input')
+        inputJoints.set('source', '#' + sourceName_0)
+        inputJoints.set('semantic', 'JOINT')
+        inputJoints.set('offset', '0')
+        
+        inputWeight = ET.SubElement(vertexWeightDom, 'input')
+        inputWeight.set('source', '#' + sourceName_2)
+        inputWeight.set('semantic', 'WEIGHT')
+        inputWeight.set('offset', '1')
+        
+        vcountDom = ET.SubElement(vertexWeightDom, 'vcount')
+        vcountDom.text = ' '.join(str(val) for val in vcount )
+        vDom = ET.SubElement(vertexWeightDom, 'v')
+        vDom.text = ' '.join(str(val) for val in v )
+        
+        print(weights)
+        print(vcount)
+        print(v)
 
 def loadLibGeometries( lib_geometries ):
     ET.SubElement(lib_geometries, 'mesh')
@@ -184,3 +234,6 @@ def export( context, filepath ):
     prettify(collada)
     tree = ET.ElementTree(collada)
     tree.write(filepath, encoding="utf-8", xml_declaration=True)
+    
+#### comment this test output part when deploying. ####
+#export(bpy.context, r'D://projects//dae_library//assets//dev.dae')
