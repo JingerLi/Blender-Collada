@@ -7,18 +7,26 @@ mesh_targets = {}
 controller_targets = {}
 
 class SourceType(Enum):
+    Name_array = 0
+    float_array = 1
+
+class DataType(Enum):
     string = 0
     float = 1
     float4x4 = 2
 
-def buildSource(domNode, strdata, count, id, dataName, type=SourceType.float):
+class Param:
+    name = ''
+    type = DataType.string
+    def __init__(self, n, t):
+        self.name = n
+        self.type = t
+
+def buildSource(domNode, strdata, count, id, params, sourceType=SourceType.float_array):
     sourceNode = ET.SubElement(domNode, 'source')
     sourceNode.set('id', id)
-    data = None
-    if(type == SourceType.string):
-        data = ET.SubElement(sourceNode, 'Name_array')
-    else:
-        data = ET.SubElement(sourceNode, 'float_array')
+    data = ET.SubElement(sourceNode, sourceType.name)
+
     data.set('id', id + '.data')
     data.set('count', str(count))
     data.text = strdata
@@ -26,15 +34,19 @@ def buildSource(domNode, strdata, count, id, dataName, type=SourceType.float):
     techcom = ET.SubElement(sourceNode, 'technique_common')
     accessor = ET.SubElement(techcom, 'accessor')
     accessor.set('source', '#' + id + '.data')
-    stride = 1
-    if(type == SourceType.float4x4):
-        stride = 16
-    accessor.set('count', str(int(count/stride)))
-    accessor.set('stride', str(stride))
-    
-    param = ET.SubElement(accessor, 'param')
-    param.set('name', dataName)
-    param.set('type', type.name)
+    stride = 0
+    for p in params:
+        t = p.type
+        param = ET.SubElement(accessor, 'param')
+        param.set('name', p.name)
+        param.set('type', t.name)
+        if( t == DataType.string or t == DataType.float):
+            stride += 1
+        elif ( t == DataType.float4x4 ):
+            stride += 16
+    if(stride != 0):
+        accessor.set('count', str(int(count/stride)))
+        accessor.set('stride', str(stride))
 
 def matrixToStrList(mat, transpose):
     if(transpose):
@@ -66,7 +78,6 @@ def loadBonesTree( root, domNode, namebase ):
             domStack.append(dc)
     
 def loadNodeArmature(obj, domNode):
-    print('type: ' + obj.name)
     armature = obj.data
     posePosition = armature.pose_position
     armature.pose_position = 'REST'
@@ -123,7 +134,7 @@ def loadLibControllers( lib_controllers ):
         bones = obj.pose.bones
         bonesNameList = ' '.join( b.name for b in bones )
         sourceName_0 = c + '.joints'
-        buildSource(skin, bonesNameList, len(bones), sourceName_0, 'JOINT', SourceType.string)
+        buildSource(skin, bonesNameList, len(bones), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
         inputNameList = ET.SubElement(joints, 'input')
         inputNameList.set('source', '#' + sourceName_0)
         inputNameList.set('semantic', 'JOINT')
@@ -135,7 +146,7 @@ def loadLibControllers( lib_controllers ):
             boneMats.append(matrixToStrList(boneMatrix, True))
         boneMatrixList = ' '.join( str for str in boneMats )
         sourceName_1 = c + '.inverse.bind.matrix'
-        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, 'TRANSFORM', SourceType.float4x4)
+        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
         inputIBMList = ET.SubElement(joints, 'input')
         inputIBMList.set('source', '#' + sourceName_1)
         inputIBMList.set('semantic', 'INV_BIND_MATRIX')
@@ -154,10 +165,10 @@ def loadLibControllers( lib_controllers ):
                 weightIndex = weightDictionary[g.weight]
                 v.append(g.group)
                 v.append(weightIndex)
-                
+
         sourceName_2 = c + '.skin.weights'
         weightsStr = ' '.join( str(w) for w in weights)
-        buildSource(skin, weightsStr, len(weights), sourceName_2, 'WEIGHT', SourceType.float)
+        buildSource(skin, weightsStr, len(weights), sourceName_2, [Param('WEIGHT',DataType.float)], SourceType.float_array)
         
         vertexWeightDom = ET.SubElement(skin, 'vertex_weights')
         vertexWeightDom.set('count', str(len(vcount)))
@@ -175,15 +186,84 @@ def loadLibControllers( lib_controllers ):
         vcountDom.text = ' '.join(str(val) for val in vcount )
         vDom = ET.SubElement(vertexWeightDom, 'v')
         vDom.text = ' '.join(str(val) for val in v )
-        
-        print(weights)
-        print(vcount)
-        print(v)
 
 def loadLibGeometries( lib_geometries ):
-    ET.SubElement(lib_geometries, 'mesh')
-    print("TODO load geometries.")
+    for g in mesh_targets:  
+        mesh = mesh_targets[g]
+        vertices = mesh.vertices
+        vertPosStrs = []
+        for v in vertices:
+            vertPosStrs.append(' '.join( str(val) for val in v.co ))
+        sourceNamePos = g + '.vertex.position'
+        vertStrData = ' '.join( str for str in vertPosStrs)
 
+        loops = mesh.loops
+        polygons = mesh.polygons
+        triangles = []
+
+        triangleNormals = []
+        for p in polygons:
+            nal = numpy.asarray(p.normal)
+            ni = len(triangleNormals)
+            triangleNormals.append(' '.join(str(val) for val in nal))
+            s = p.loop_start
+            if(p.loop_total == 3):                             
+                triangles.append( loops[s+0].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+1].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+2].vertex_index)
+                triangles.append(ni)
+            elif(p.loop_total == 4):
+                triangles.append( loops[s+0].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+1].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+2].vertex_index)               
+                triangles.append(ni)
+                triangles.append( loops[s+0].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+2].vertex_index)
+                triangles.append(ni)
+                triangles.append( loops[s+3].vertex_index)
+                triangles.append(ni)
+            else:
+                print('Plygon has to be triangles or quads...')
+                
+        sourceTriNormals = g + '.triangle.normals'
+        sourceTriNormalsData = ' '.join( str for str in triangleNormals)
+
+        geometry = ET.SubElement(lib_geometries, g)
+        geometry.set('id', g)
+        meshDom = ET.SubElement(geometry, 'mesh')        
+        buildSource(meshDom, vertStrData, len(vertices) * 3, sourceNamePos,
+            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)        
+        buildSource(meshDom, sourceTriNormalsData, len(triangleNormals) * 3, sourceTriNormals, 
+            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)
+        
+        verticesDom = ET.SubElement(meshDom, 'vertices')
+        verticesDomID = g + '.vertices'
+        verticesDom.set('id', verticesDomID)
+        vertexPosInput = ET.SubElement(verticesDom, 'input')
+        vertexPosInput.set('semantic', 'POSITION')
+        vertexPosInput.set('source', '#' + sourceNamePos)
+        
+        trianglesDom = ET.SubElement(meshDom, 'triangles')
+        trianglesDom.set('count', str(int(len(triangles)/3)))
+        
+        triangleInput = ET.SubElement(trianglesDom, 'input')
+        triangleInput.set('semantic', 'VERTEX')
+        triangleInput.set('source', '#' + verticesDomID)
+        
+        triangleInput = ET.SubElement(trianglesDom, 'input')
+        triangleInput.set('semantic', 'NORMAL')
+        triangleInput.set('source', '#' + sourceTriNormals)
+        
+        pData = ' '.join( str(v) for v in triangles)
+        pDom = ET.SubElement(trianglesDom, 'p')
+        pDom.text = pData
+        print(triangles)
+        
 def loadLibVisualScene( lib_visual_scene ):
     objscene = bpy.data.scenes[0]
     domScene = ET.SubElement(lib_visual_scene, 'visual_scene')
@@ -227,8 +307,8 @@ def export( context, filepath ):
     lib_controllers = ET.SubElement(collada, 'library_controllers')
     lib_visual_sence = ET.SubElement(collada, 'library_visual_scenes')
     
-    loadLibGeometries(lib_geometries)
     loadLibVisualScene(lib_visual_sence)
+    loadLibGeometries(lib_geometries)
     loadLibControllers(lib_controllers)
     
     prettify(collada)
