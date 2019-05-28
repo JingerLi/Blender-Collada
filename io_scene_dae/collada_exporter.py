@@ -120,37 +120,18 @@ def loadLibControllers( lib_controllers ):
         obj = meta['modifier'].object
         armature = obj.data
          
-        ctrl = ET.SubElement(lib_controllers, 'controller')
-        ctrl.set('id', c)
-        ctrl.set('name', obj.name)
-        
-        skin = ET.SubElement(ctrl, 'skin')
-        skin.set('source', '#' + mesh.name)
-        
-        bsmat = ET.SubElement(skin, 'bind_shape_matrix')
-        bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
-        joints = ET.SubElement(skin, 'joints')
-        
         bones = obj.pose.bones
-        bonesNameList = ' '.join( b.name for b in bones )
         sourceName_0 = c + '.joints'
-        buildSource(skin, bonesNameList, len(bones), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
-        inputNameList = ET.SubElement(joints, 'input')
-        inputNameList.set('source', '#' + sourceName_0)
-        inputNameList.set('semantic', 'JOINT')
-        
+        bonesNameList = ' '.join( b.name for b in bones )
+                
         boneMats = []
         for b in bones:
             boneMatrix = b.matrix.copy()
             boneMatrix.inverted()
-            boneMats.append(matrixToStrList(boneMatrix, True))
-        boneMatrixList = ' '.join( str for str in boneMats )
+            boneMats.append(matrixToStrList(boneMatrix, True))   
         sourceName_1 = c + '.inverse.bind.matrix'
-        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
-        inputIBMList = ET.SubElement(joints, 'input')
-        inputIBMList.set('source', '#' + sourceName_1)
-        inputIBMList.set('semantic', 'INV_BIND_MATRIX')
-
+        boneMatrixList = ' '.join( str for str in boneMats )
+ 
         weightDictionary = {}
         weights = []
         vcount = []
@@ -165,10 +146,30 @@ def loadLibControllers( lib_controllers ):
                 weightIndex = weightDictionary[g.weight]
                 v.append(g.group)
                 v.append(weightIndex)
-
         sourceName_2 = c + '.skin.weights'
-        weightsStr = ' '.join( str(w) for w in weights)
+        weightsStr = ' '.join( str(w) for w in weights)    
+            
+        ctrl = ET.SubElement(lib_controllers, 'controller')
+        ctrl.set('id', c)
+        ctrl.set('name', obj.name)
+        
+        skin = ET.SubElement(ctrl, 'skin')
+        skin.set('source', '#' + mesh.name)
+        
+        bsmat = ET.SubElement(skin, 'bind_shape_matrix')
+        bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
+        
+        buildSource(skin, bonesNameList, len(bones), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
+        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
         buildSource(skin, weightsStr, len(weights), sourceName_2, [Param('WEIGHT',DataType.float)], SourceType.float_array)
+         
+        joints = ET.SubElement(skin, 'joints')
+        inputNameList = ET.SubElement(joints, 'input')
+        inputNameList.set('source', '#' + sourceName_0)
+        inputNameList.set('semantic', 'JOINT')
+        inputIBMList = ET.SubElement(joints, 'input')
+        inputIBMList.set('source', '#' + sourceName_1)
+        inputIBMList.set('semantic', 'INV_BIND_MATRIX')
         
         vertexWeightDom = ET.SubElement(skin, 'vertex_weights')
         vertexWeightDom.set('count', str(len(vcount)))
@@ -316,4 +317,4 @@ def export( context, filepath ):
     tree.write(filepath, encoding="utf-8", xml_declaration=True)
     
 #### comment this test output part when deploying. ####
-#export(bpy.context, r'D://projects//dae_library//assets//dev.dae')
+export(bpy.context, r'D://projects//dae_library//assets//dev.dae')
