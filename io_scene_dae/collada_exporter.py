@@ -197,6 +197,19 @@ def loadLibGeometries( lib_geometries ):
             vertPosStrs.append(' '.join( str(val) for val in v.co ))
         sourceNamePos = g + '.vertex.position'
         vertStrData = ' '.join( str for str in vertPosStrs)
+        
+        uvSet = 0
+        allUVCoordsName = []
+        allUVCoords = []
+        uvLayers = mesh.uv_layers
+        for uvLayer in uvLayers:
+            uvData = uvLayer.data
+            uvCoords = []
+            for d in uvData:
+                uvCoords.append(' '.join( str(val) for val in d.uv ))
+            allUVCoordsName.append( g + '.uvlayer' + str(uvSet))
+            allUVCoords.append(uvCoords)
+            uvSet+=1
 
         loops = mesh.loops
         polygons = mesh.polygons
@@ -234,11 +247,19 @@ def loadLibGeometries( lib_geometries ):
         sourceTriNormals = g + '.triangle.normals'
         sourceTriNormalsData = ' '.join( str for str in triangleNormals)
 
-        geometry = ET.SubElement(lib_geometries, g)
+        geometry = ET.SubElement(lib_geometries, 'geometry')
         geometry.set('id', g)
         meshDom = ET.SubElement(geometry, 'mesh')        
         buildSource(meshDom, vertStrData, len(vertices) * 3, sourceNamePos,
-            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)        
+            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)
+        
+        for i in range(len(allUVCoords)):
+            uvCoord = allUVCoords[i]
+            datum = ' '.join( str for str in uvCoord )
+            buildSource(meshDom, datum, len(allUVCoords[i]) * 2, allUVCoordsName[i],
+                [ Param('u',DataType.float), Param('v',DataType.float)], SourceType.float_array)
+        
+              
         buildSource(meshDom, sourceTriNormalsData, len(triangleNormals) * 3, sourceTriNormals, 
             [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)
         
@@ -248,6 +269,10 @@ def loadLibGeometries( lib_geometries ):
         vertexPosInput = ET.SubElement(verticesDom, 'input')
         vertexPosInput.set('semantic', 'POSITION')
         vertexPosInput.set('source', '#' + sourceNamePos)
+        for i in range(len(allUVCoords)):
+            vertexTexCoordInput = ET.SubElement(verticesDom, 'input')
+            vertexTexCoordInput.set('semantic', 'TEXCOORD' + str(i))
+            vertexTexCoordInput.set('source', '#' + allUVCoordsName[i])
         
         trianglesDom = ET.SubElement(meshDom, 'triangles')
         trianglesDom.set('count', str(int(len(triangles)/3)))
@@ -255,15 +280,16 @@ def loadLibGeometries( lib_geometries ):
         triangleInput = ET.SubElement(trianglesDom, 'input')
         triangleInput.set('semantic', 'VERTEX')
         triangleInput.set('source', '#' + verticesDomID)
+        triangleInput.set('offset', '0')
         
         triangleInput = ET.SubElement(trianglesDom, 'input')
         triangleInput.set('semantic', 'NORMAL')
         triangleInput.set('source', '#' + sourceTriNormals)
+        triangleInput.set('offset', '1')
         
         pData = ' '.join( str(v) for v in triangles)
         pDom = ET.SubElement(trianglesDom, 'p')
         pDom.text = pData
-        print(triangles)
         
 def loadLibVisualScene( lib_visual_scene ):
     objscene = bpy.data.scenes[0]
