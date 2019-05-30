@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 
 mesh_targets = {}
 controller_targets = {}
+images = {}
 
 class SourceType(Enum):
     Name_array = 0
@@ -198,23 +199,24 @@ def loadLibGeometries( lib_geometries ):
         sourceNamePos = g + '.vertex.position'
         vertStrData = ' '.join( str for str in vertPosStrs)
         
+        loops = mesh.loops
+    
         uvSet = 0
         allUVCoordsName = []
         allUVCoords = []
         uvLayers = mesh.uv_layers
         for uvLayer in uvLayers:
             uvData = uvLayer.data
-            uvCoords = []
-            for d in uvData:
-                uvCoords.append(' '.join( str(val) for val in d.uv ))
+            uvCoords = ['0.0 0.0'] * len(vertices)
+            for li in range(len(loops)):
+                vi = loops[li].vertex_index
+                uvCoords[vi] = ' '.join( str(val) for val in uvData[li].uv )
             allUVCoordsName.append( g + '.uvlayer' + str(uvSet))
             allUVCoords.append(uvCoords)
             uvSet+=1
 
-        loops = mesh.loops
         polygons = mesh.polygons
         triangles = []
-
         triangleNormals = []
         for p in polygons:
             nal = numpy.asarray(p.normal)
