@@ -335,8 +335,8 @@ def buildAnimation( node, strip ):
                 translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
                 scaleMat = Matrix.Scale(1.0, 4, Vector( (chs[7].evaluate(timePt), chs[8].evaluate(timePt), chs[9].evaluate(timePt)) ) )
                 mat = mat * translateMat * scaleMat
-                matstrs = matrixToStrList(mat, True)
-                transMats.append(matstrs)
+                matStrs = matrixToStrList(mat, True)
+                transMats.append(matStrs)
                 interpolation.append('LINEAR')
             timelineDatumName = grp.name + '.timeline'
             datumTimeline = ' '.join(str(v) for v in timeline)
@@ -381,7 +381,7 @@ def loadLibAnimations(lib_animations):
         #    animData = obj.data.animation_data
         if(animData != None):
             animNode = ET.SubElement(lib_animations, 'animation')
-            animNode.set('id', objName)
+            animNode.set('id', objName + '.anim')
             tracks = animData.nla_tracks
             for tra in tracks:                
                 traNode = ET.SubElement(animNode, 'animation')
