@@ -1,6 +1,8 @@
 import bpy
 import numpy
+import mathutils
 from enum import Enum
+from mathutils import Matrix, Quaternion, Vector
 import xml.etree.ElementTree as ET
 
 mesh_targets = {}
@@ -23,6 +25,13 @@ class Param:
         self.name = n
         self.type = t
 
+def addInputBlock(domNode, semantic, source, offset=None):
+    input = ET.SubElement(domNode, 'input')
+    input.set('semantic', semantic)
+    input.set('source', source)
+    if(offset != None):
+        input.set('offset', str(offset))
+        
 def buildSource(domNode, strdata, count, id, params, sourceType=SourceType.float_array):
     sourceNode = ET.SubElement(domNode, 'source')
     sourceNode.set('id', id)
@@ -165,24 +174,13 @@ def loadLibControllers( lib_controllers ):
         buildSource(skin, weightsStr, len(weights), sourceName_2, [Param('WEIGHT',DataType.float)], SourceType.float_array)
          
         joints = ET.SubElement(skin, 'joints')
-        inputNameList = ET.SubElement(joints, 'input')
-        inputNameList.set('source', '#' + sourceName_0)
-        inputNameList.set('semantic', 'JOINT')
-        inputIBMList = ET.SubElement(joints, 'input')
-        inputIBMList.set('source', '#' + sourceName_1)
-        inputIBMList.set('semantic', 'INV_BIND_MATRIX')
+        addInputBlock(joints, 'JOINT', '#' + sourceName_0)
+        addInputBlock(joints, 'INV_BIND_MATRIX', '#' + sourceName_1)       
         
         vertexWeightDom = ET.SubElement(skin, 'vertex_weights')
         vertexWeightDom.set('count', str(len(vcount)))
-        inputJoints = ET.SubElement(vertexWeightDom, 'input')
-        inputJoints.set('source', '#' + sourceName_0)
-        inputJoints.set('semantic', 'JOINT')
-        inputJoints.set('offset', '0')
-        
-        inputWeight = ET.SubElement(vertexWeightDom, 'input')
-        inputWeight.set('source', '#' + sourceName_2)
-        inputWeight.set('semantic', 'WEIGHT')
-        inputWeight.set('offset', '1')
+        addInputBlock(vertexWeightDom, 'JOINT', '#' + sourceName_0, 0)
+        addInputBlock(vertexWeightDom, 'WEIGHT', '#' + sourceName_2, 1)
         
         vcountDom = ET.SubElement(vertexWeightDom, 'vcount')
         vcountDom.text = ' '.join(str(val) for val in vcount )
@@ -253,15 +251,12 @@ def loadLibGeometries( lib_geometries ):
         geometry.set('id', g)
         meshDom = ET.SubElement(geometry, 'mesh')        
         buildSource(meshDom, vertStrData, len(vertices) * 3, sourceNamePos,
-            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)
-        
+            [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)     
         for i in range(len(allUVCoords)):
             uvCoord = allUVCoords[i]
             datum = ' '.join( str for str in uvCoord )
             buildSource(meshDom, datum, len(allUVCoords[i]) * 2, allUVCoordsName[i],
                 [ Param('u',DataType.float), Param('v',DataType.float)], SourceType.float_array)
-        
-              
         buildSource(meshDom, sourceTriNormalsData, len(triangleNormals) * 3, sourceTriNormals, 
             [ Param('x',DataType.float), Param('y',DataType.float), Param('z',DataType.float) ], SourceType.float_array)
         
@@ -309,6 +304,91 @@ def loadLibVisualScene( lib_visual_scene ):
         elif(obj.type == 'ARMATURE'):
             loadNodeArmature(obj, domNode)
 
+def buildAnimation( node, strip ):
+    if(strip == None):
+        return;
+    action = strip.action
+    actionIDRoot = action.id_root
+
+    if(actionIDRoot == 'MESH'):
+        #print('Handle fcurve in MESH mode')
+        #1. pick up vertices that changes in the clip.
+        #2. build source, channel, sampler for each such vertex.
+        fcurves = action.fcurves
+        print('Build sources and channels for vertices ' + str(len(fcurves)))
+        print('Removing dead vertex is required.')
+    elif (actionIDRoot == 'OBJECT'):
+        groups = action.groups
+        for grp in groups:
+            chs = grp.channels
+            timelineset = set()
+            for ch in chs:
+                kfpts = ch.keyframe_points
+                for kf in kfpts:
+                    timelineset.add(kf.co[0])
+            timeline = list(timelineset)
+            timeline.sort()
+            transMats = []
+            interpolation = []
+            for timePt in timeline:
+                mat = Quaternion( (chs[3].evaluate(timePt), chs[4].evaluate(timePt), chs[5].evaluate(timePt),  chs[6].evaluate(timePt)) ).to_matrix().to_4x4()
+                translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
+                scaleMat = Matrix.Scale(1.0, 4, Vector( (chs[7].evaluate(timePt), chs[8].evaluate(timePt), chs[9].evaluate(timePt)) ) )
+                mat = mat * translateMat * scaleMat
+                matstrs = matrixToStrList(mat, True)
+                transMats.append(matstrs)
+                interpolation.append('LINEAR')
+            timelineDatumName = grp.name + '.timeline'
+            datumTimeline = ' '.join(str(v) for v in timeline)
+            buildSource(node, datumTimeline, len(timeline), timelineDatumName,
+                [ Param('TIME',DataType.float) ], SourceType.float_array)
+                
+            transformName = grp.name + '.transform'
+            datumTransform = ' '.join( v for v in transMats )
+            buildSource(node, datumTransform, len(transMats) * 16, transformName,
+                [ Param('TRANSFORM',DataType.float4x4) ], SourceType.float_array)
+                
+            interpoName = grp.name + '.interpolation'
+            datumInterpo = ' '.join( v for v in interpolation )
+            buildSource(node, datumInterpo, len(interpolation), interpoName,
+                [ Param('INTERPOLATION',DataType.string) ], SourceType.Name_array)
+            
+            samplerID = grp.name + '.sampler'
+            sampler = ET.SubElement(node, 'sampler')
+            sampler.set('id', samplerID)
+            addInputBlock(sampler, 'INPUT', '#' + timelineDatumName)
+            addInputBlock(sampler, 'OUTPUT', '#' + transformName)
+            addInputBlock(sampler, 'INTERPOLATION', '#' + interpoName)
+            
+            channel = ET.SubElement(node, 'channel')
+            channel.set('source', '#' + samplerID)
+            channel.set('target', grp.name + '/transform')
+
+# DO NOT Support MESH animation yet.
+# ONLY support linear matrix interpolation for smaller file size.              
+def loadLibAnimations(lib_animations):
+    objscene = bpy.data.scenes[0]
+    objs = objscene.objects
+    for obj in objs:
+        objName = obj.name
+        objType = obj.type
+
+        animData = None
+        type = None
+        if(objType == 'ARMATURE'):
+            animData = obj.animation_data
+        #elif(objType == 'MESH' and obj.data.animation_data != None ):
+        #    animData = obj.data.animation_data
+        if(animData != None):
+            animNode = ET.SubElement(lib_animations, 'animation')
+            animNode.set('id', objName)
+            tracks = animData.nla_tracks
+            for tra in tracks:                
+                traNode = ET.SubElement(animNode, 'animation')
+                traNode.set('id', tra.name)
+                strip = tra.strips[0]
+                buildAnimation(traNode, strip)
+            
 def prettify( root ):
     lvstack = []
     elmstack = []
@@ -331,14 +411,15 @@ def export( context, filepath ):
     collada.set('version', '1.5.0')
     collada.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
     
-    lib_geometries = ET.SubElement(collada, 'library_geometries')    
     lib_animations = ET.SubElement(collada, 'library_animations')
+    lib_geometries = ET.SubElement(collada, 'library_geometries')    
     lib_controllers = ET.SubElement(collada, 'library_controllers')
     lib_visual_sence = ET.SubElement(collada, 'library_visual_scenes')
     
     loadLibVisualScene(lib_visual_sence)
     loadLibGeometries(lib_geometries)
     loadLibControllers(lib_controllers)
+    loadLibAnimations(lib_animations)
     
     prettify(collada)
     tree = ET.ElementTree(collada)
