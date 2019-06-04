@@ -380,12 +380,10 @@ def loadLibAnimations(lib_animations):
         #elif(objType == 'MESH' and obj.data.animation_data != None ):
         #    animData = obj.data.animation_data
         if(animData != None):
-            animNode = ET.SubElement(lib_animations, 'animation')
-            animNode.set('id', objName + '.anim')
             tracks = animData.nla_tracks
             for tra in tracks:                
-                traNode = ET.SubElement(animNode, 'animation')
-                traNode.set('id', tra.name)
+                traNode = ET.SubElement(lib_animations, 'animation')
+                traNode.set('id', objName + '.' + tra.name)
                 strip = tra.strips[0]
                 buildAnimation(traNode, strip)
             
