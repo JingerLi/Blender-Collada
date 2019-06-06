@@ -5,6 +5,9 @@ from enum import Enum
 from mathutils import Matrix, Quaternion, Vector
 import xml.etree.ElementTree as ET
 
+import os
+os.system('cls')
+
 mesh_targets = {}
 controller_targets = {}
 images = {}
@@ -79,32 +82,35 @@ def loadBonesTree( root, domNode, namebase ):
         dom.set('type', 'JOINT')
         
         matrix = ET.SubElement(dom, 'matrix')
-        matText = matrixToStrList(cb.matrix_basis.copy(), True)
+        matText = ''
+        if(cb.parent == None):
+            matText = matrixToStrList(cb.matrix_local.copy(), True)
+        else:
+            parentLocalMat = cb.parent.matrix_local.copy()
+            parentLocalMat.invert()
+            localMat= cb.matrix_local * parentLocalMat
+            matText = matrixToStrList(localMat, True)
         matrix.text = matText
-                
+        
         for c in cb.children:
             dc = ET.SubElement(dom, 'node')
             boneStack.append(c)
             domStack.append(dc)
     
 def loadNodeArmature(obj, domNode):
-    armature = obj.data
-    posePosition = armature.pose_position
-    armature.pose_position = 'REST'
-        
+    armature = obj.data   
     matText = matrixToStrList(obj.matrix_world.copy(), True)
     matNode = ET.SubElement(domNode, 'matrix')
     matNode.text = matText
     
     roots = []
-    pose = obj.pose
-    for b in pose.bones:
+    bones = armature.bones;
+    for b in bones:
         if(b.parent == None):
             roots.append(b)
     for r in roots:
         boneRoot = ET.SubElement(domNode, 'node')
         loadBonesTree(r, boneRoot, obj.name)
-    armature.pose_position = posePosition
     
 def loadNodeMesh(obj, domNode ):
     matText = matrixToStrList(obj.matrix_world.copy(), True)
@@ -120,25 +126,27 @@ def loadNodeMesh(obj, domNode ):
         id = m.name + '.' + obj.name + '.skin'
         instCtrl = ET.SubElement(domNode, 'instance_controller')
         instCtrl.set('url',  '#' + id)
-        ctrlMeta = { 'mesh': mesh,  'modifier': m}
+        ctrlMeta = { 'object': obj, 'mesh': mesh,  'modifier': m}
         controller_targets[id] = ctrlMeta
 
 def loadLibControllers( lib_controllers ):
     for c in controller_targets:
         meta = controller_targets[c]
         mesh = meta['mesh']
-        obj = meta['modifier'].object
-        armature = obj.data
-         
-        bones = obj.pose.bones
+        modifier = meta['modifier'].object
+        armature = modifier.data
+       
+        bones = armature.bones
+        
         sourceName_0 = c + '.joints'
         bonesNameList = ' '.join( b.name for b in bones )
-                
+        
         boneMats = []
         for b in bones:
-            boneMatrix = b.matrix.copy()
-            boneMatrix.inverted()
-            boneMats.append(matrixToStrList(boneMatrix, True))   
+           boneMatrix = b.matrix_local
+           invertedMatrix = boneMatrix.inverted()
+           boneMats.append(matrixToStrList(invertedMatrix.copy(), True))
+           
         sourceName_1 = c + '.inverse.bind.matrix'
         boneMatrixList = ' '.join( str for str in boneMats )
  
@@ -161,13 +169,14 @@ def loadLibControllers( lib_controllers ):
             
         ctrl = ET.SubElement(lib_controllers, 'controller')
         ctrl.set('id', c)
-        ctrl.set('name', obj.name)
+        ctrl.set('name', modifier.name)
         
         skin = ET.SubElement(ctrl, 'skin')
         skin.set('source', '#' + mesh.name)
         
         bsmat = ET.SubElement(skin, 'bind_shape_matrix')
-        bsmat.text = matrixToStrList(obj.matrix_world.copy(), True)
+        object = meta['object'];
+        bsmat.text = matrixToStrList(object.matrix_local.copy(), True)
         
         buildSource(skin, bonesNameList, len(bones), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
         buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
@@ -332,9 +341,10 @@ def buildAnimation( node, strip ):
             interpolation = []
             for timePt in timeline:
                 mat = Quaternion( (chs[3].evaluate(timePt), chs[4].evaluate(timePt), chs[5].evaluate(timePt),  chs[6].evaluate(timePt)) ).to_matrix().to_4x4()
-                translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
                 scaleMat = Matrix.Scale(1.0, 4, Vector( (chs[7].evaluate(timePt), chs[8].evaluate(timePt), chs[9].evaluate(timePt)) ) )
-                mat = mat * translateMat * scaleMat
+                translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
+                mat = mat * scaleMat * translateMat
+                
                 matStrs = matrixToStrList(mat, True)
                 transMats.append(matStrs)
                 interpolation.append('LINEAR')
