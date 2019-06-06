@@ -337,14 +337,19 @@ def buildAnimation( node, strip ):
                     timelineset.add(kf.co[0])
             timeline = list(timelineset)
             timeline.sort()
+            
             transMats = []
             interpolation = []
             for timePt in timeline:
-                mat = Quaternion( (chs[3].evaluate(timePt), chs[4].evaluate(timePt), chs[5].evaluate(timePt),  chs[6].evaluate(timePt)) ).to_matrix().to_4x4()
-                scaleMat = Matrix.Scale(1.0, 4, Vector( (chs[7].evaluate(timePt), chs[8].evaluate(timePt), chs[9].evaluate(timePt)) ) )
                 translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
-                mat = mat * scaleMat * translateMat
-                
+                quaternion = Quaternion( (chs[3].evaluate(timePt), chs[4].evaluate(timePt), chs[5].evaluate(timePt),  chs[6].evaluate(timePt)) )
+                quaternion.normalize()
+                scaleMat = Matrix.Identity(4)
+                scaleMat[0][0] = chs[7].evaluate(timePt)
+                scaleMat[1][1] = chs[8].evaluate(timePt)
+                scaleMat[2][2] = chs[9].evaluate(timePt)
+
+                mat =  quaternion.to_matrix().to_4x4() * scaleMat * translateMat
                 matStrs = matrixToStrList(mat, True)
                 transMats.append(matStrs)
                 interpolation.append('LINEAR')
