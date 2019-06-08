@@ -132,20 +132,29 @@ def loadNodeMesh(obj, domNode ):
 def loadLibControllers( lib_controllers ):
     for c in controller_targets:
         meta = controller_targets[c]
+        obj = meta['object']
         mesh = meta['mesh']
         modifier = meta['modifier'].object
         armature = modifier.data
-       
         bones = armature.bones
         
-        sourceName_0 = c + '.joints'
-        bonesNameList = ' '.join( b.name for b in bones )
-        
+        vGroups = obj.vertex_groups
+        sourceName_0 = c + '.groups'
+        vertGroups = []
+        for vg in vGroups:
+             vertGroups.append(vg.name)
+        bonesNameList = ' '.join( n for n in vertGroups)
+ 
         boneMats = []
-        for b in bones:
-           boneMatrix = b.matrix_local
-           invertedMatrix = boneMatrix.inverted()
-           boneMats.append(matrixToStrList(invertedMatrix.copy(), True))
+        for n in vertGroups:
+            index = bones.find(n);
+            if( index != -1):
+                b = bones[index]
+                boneMatrix = b.matrix_local
+                invertedMatrix = boneMatrix.inverted()
+                boneMats.append(matrixToStrList(invertedMatrix.copy(), True))
+            else:
+                boneMats.append(matrixToStrList(Matrix.Identity(4), True))
            
         sourceName_1 = c + '.inverse.bind.matrix'
         boneMatrixList = ' '.join( str for str in boneMats )
@@ -154,16 +163,18 @@ def loadLibControllers( lib_controllers ):
         weights = []
         vcount = []
         v = []
+        
         vertices = mesh.vertices
         for vert in vertices:
             vcount.append(len(vert.groups))
-            for g in vert.groups:
+            for g in vert.groups:         
                 if( g.weight not in weightDictionary ):
                     weightDictionary[g.weight] = len(weights)
                     weights.append(g.weight)
                 weightIndex = weightDictionary[g.weight]
                 v.append(g.group)
                 v.append(weightIndex)
+        print(len(weights))
         sourceName_2 = c + '.skin.weights'
         weightsStr = ' '.join( str(w) for w in weights)    
             
@@ -178,8 +189,8 @@ def loadLibControllers( lib_controllers ):
         object = meta['object'];
         bsmat.text = matrixToStrList(object.matrix_local.copy(), True)
         
-        buildSource(skin, bonesNameList, len(bones), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
-        buildSource(skin, boneMatrixList, len(bones) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
+        buildSource(skin, bonesNameList, len(vGroups), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
+        buildSource(skin, boneMatrixList, len(vGroups) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
         buildSource(skin, weightsStr, len(weights), sourceName_2, [Param('WEIGHT',DataType.float)], SourceType.float_array)
          
         joints = ET.SubElement(skin, 'joints')
@@ -341,15 +352,26 @@ def buildAnimation( node, strip ):
             transMats = []
             interpolation = []
             for timePt in timeline:
-                translateMat = Matrix.Translation( Vector( (chs[0].evaluate(timePt), chs[1].evaluate(timePt), chs[2].evaluate(timePt)) ) )
-                quaternion = Quaternion( (chs[3].evaluate(timePt), chs[4].evaluate(timePt), chs[5].evaluate(timePt),  chs[6].evaluate(timePt)) )
-                quaternion.normalize()
-                scaleMat = Matrix.Identity(4)
-                scaleMat[0][0] = chs[7].evaluate(timePt)
-                scaleMat[1][1] = chs[8].evaluate(timePt)
-                scaleMat[2][2] = chs[9].evaluate(timePt)
-
-                mat =  quaternion.to_matrix().to_4x4() * scaleMat * translateMat
+                translate = []
+                quaternion = []
+                scaling = []
+                for ch in chs:
+                    type = ch.data_path.split('.')[-1]
+                    if( type == 'location'):
+                        translate.append(ch.evaluate(timePt))
+                    elif( type == 'rotation_quaternion'):
+                        quaternion.append(ch.evaluate(timePt))
+                    elif( type == 'scale'):
+                        scaling.append(ch.evaluate(timePt))
+                matLoc = Matrix.Identity(4) if len(translate) != 3 else Matrix.Translation( ( translate[0], translate[1], translate[2]) )
+                matRot = Matrix.Identity(4) if len(quaternion) != 4 else Quaternion( (quaternion[0], quaternion[1], quaternion[2], quaternion[3]) ).to_matrix().to_4x4()
+                matScl = Matrix.Identity(4)
+                if( len(scaling) == 3):
+                    matScl[0][0] = scaling[0]
+                    matScl[1][1] = scaling[1]
+                    matScl[2][2] = scaling[2]
+                    
+                mat =  matRot * matScl * matLoc
                 matStrs = matrixToStrList(mat, True)
                 transMats.append(matStrs)
                 interpolation.append('LINEAR')
@@ -439,4 +461,4 @@ def export( context, filepath ):
     tree.write(filepath, encoding="utf-8", xml_declaration=True)
     
 #### comment this test output part when deploying. ####
-export(bpy.context, r'D://projects//dae_library//assets//dev.dae')
+export(bpy.context, r'D://projects//dae_library//assets//dae_dev_mesh.dae')
