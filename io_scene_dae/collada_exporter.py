@@ -82,16 +82,24 @@ def loadBonesTree( root, domNode, namebase ):
         dom.set('type', 'JOINT')
         
         matrix = ET.SubElement(dom, 'matrix')
+        matrix.set('sid', 'LOCALBINDING')
+        matrixInv = ET.SubElement(dom, 'matrix')
+        matrixInv.set('sid', 'INVBINDING')
         matText = ''
+        matInvText = ''
         if(cb.parent == None):
             matText = matrixToStrList(cb.matrix_local.copy(), True)
+            matInvText = matrixToStrList(Matrix.Identity(4), True)
         else:
             parentLocalMat = cb.parent.matrix_local.copy()
             parentLocalMat.invert()
+            matInvText = matrixToStrList(parentLocalMat, True)
+            
             localMat= cb.matrix_local * parentLocalMat
             matText = matrixToStrList(localMat, True)
+            
         matrix.text = matText
-        
+        matrixInv.text = matInvText
         for c in cb.children:
             dc = ET.SubElement(dom, 'node')
             boneStack.append(c)
@@ -135,8 +143,6 @@ def loadLibControllers( lib_controllers ):
         obj = meta['object']
         mesh = meta['mesh']
         modifier = meta['modifier'].object
-        armature = modifier.data
-        bones = armature.bones
         
         vGroups = obj.vertex_groups
         sourceName_0 = c + '.groups'
@@ -144,20 +150,6 @@ def loadLibControllers( lib_controllers ):
         for vg in vGroups:
              vertGroups.append(vg.name)
         bonesNameList = ' '.join( n for n in vertGroups)
- 
-        boneMats = []
-        for n in vertGroups:
-            index = bones.find(n);
-            if( index != -1):
-                b = bones[index]
-                boneMatrix = b.matrix_local
-                invertedMatrix = boneMatrix.inverted()
-                boneMats.append(matrixToStrList(invertedMatrix.copy(), True))
-            else:
-                boneMats.append(matrixToStrList(Matrix.Identity(4), True))
-           
-        sourceName_1 = c + '.inverse.bind.matrix'
-        boneMatrixList = ' '.join( str for str in boneMats )
  
         weightDictionary = {}
         weights = []
@@ -189,17 +181,12 @@ def loadLibControllers( lib_controllers ):
         object = meta['object'];
         bsmat.text = matrixToStrList(object.matrix_local.copy(), True)
         
-        buildSource(skin, bonesNameList, len(vGroups), sourceName_0, [ Param('JOINT',DataType.string) ], SourceType.Name_array)
-        buildSource(skin, boneMatrixList, len(vGroups) * 16, sourceName_1, [Param('TRANSFORM',DataType.float4x4)], SourceType.float_array)
+        buildSource(skin, bonesNameList, len(vGroups), sourceName_0, [ Param('GROUPS',DataType.string) ], SourceType.Name_array)
         buildSource(skin, weightsStr, len(weights), sourceName_2, [Param('WEIGHT',DataType.float)], SourceType.float_array)
-         
-        joints = ET.SubElement(skin, 'joints')
-        addInputBlock(joints, 'JOINT', '#' + sourceName_0)
-        addInputBlock(joints, 'INV_BIND_MATRIX', '#' + sourceName_1)       
-        
+                 
         vertexWeightDom = ET.SubElement(skin, 'vertex_weights')
         vertexWeightDom.set('count', str(len(vcount)))
-        addInputBlock(vertexWeightDom, 'JOINT', '#' + sourceName_0, 0)
+        addInputBlock(vertexWeightDom, 'GROUPS', '#' + sourceName_0, 0)
         addInputBlock(vertexWeightDom, 'WEIGHT', '#' + sourceName_2, 1)
         
         vcountDom = ET.SubElement(vertexWeightDom, 'vcount')
