@@ -395,6 +395,7 @@ def loadLibAnimations(lib_animations):
     objscene = bpy.data.scenes[0]
     objs = objscene.objects
     for obj in objs:
+        obj.update_from_editmode()
         objName = obj.name
         objType = obj.type
 
@@ -449,4 +450,4 @@ def export( context, filepath ):
     tree.write(filepath, encoding="utf-8", xml_declaration=True)
     
 #### comment this test output part when deploying. ####
-export(bpy.context, r'D://projects//dae_library//assets//dae_dev_mesh.dae')
+#export(bpy.context, r'D://projects//dae_library//assets//dae_dev_mesh.dae')
