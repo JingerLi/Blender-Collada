@@ -65,7 +65,7 @@ def matrixToStrList(mat, transpose):
     if(transpose):
         mat.transpose()
     vals = numpy.asarray(mat).ravel()
-    matText = ' '.join(str(x) for x in vals )
+    matText = ' '.join( "{:.4f}".format(x) for x in vals )
     return matText
 
 def loadBonesTree( root, domNode, namebase ):
@@ -87,14 +87,16 @@ def loadBonesTree( root, domNode, namebase ):
         matrixInv.set('sid', 'INVBINDING')
         matText = ''
         matInvText = ''
+        
         if(cb.parent == None):
             matText = matrixToStrList(cb.matrix_local.copy(), True)
-            matInvText = matrixToStrList(Matrix.Identity(4), True)
-        else:
+            matInvText = matrixToStrList(Matrix.Identity(4), True)    
+        else:        
             parentLocalMat = cb.parent.matrix_local.copy()
             parentLocalMat.invert()
-            localMat= cb.matrix_local * parentLocalMat
+            localMat= parentLocalMat * cb.matrix_local
             matText = matrixToStrList(localMat, True)
+            
             invBindMat = cb.matrix_local.copy()
             invBindMat.invert()
             matInvText = matrixToStrList(invBindMat, True)
@@ -167,9 +169,8 @@ def loadLibControllers( lib_controllers ):
                 weightIndex = weightDictionary[g.weight]
                 v.append(g.group)
                 v.append(weightIndex)
-        print(len(weights))
         sourceName_2 = c + '.skin.weights'
-        weightsStr = ' '.join( str(w) for w in weights)    
+        weightsStr = ' '.join( "{:.4f}".format(w) for w in weights)    
             
         ctrl = ET.SubElement(lib_controllers, 'controller')
         ctrl.set('id', c)
@@ -201,7 +202,7 @@ def loadLibGeometries( lib_geometries ):
         vertices = mesh.vertices
         vertPosStrs = []
         for v in vertices:
-            vertPosStrs.append(' '.join( str(val) for val in v.co ))
+            vertPosStrs.append(' '.join( "{:.4f}".format(val) for val in v.co ))
         sourceNamePos = g + '.vertex.position'
         vertStrData = ' '.join( str for str in vertPosStrs)
         
@@ -216,7 +217,7 @@ def loadLibGeometries( lib_geometries ):
             uvCoords = ['0.0 0.0'] * len(vertices)
             for li in range(len(loops)):
                 vi = loops[li].vertex_index
-                uvCoords[vi] = ' '.join( str(val) for val in uvData[li].uv )
+                uvCoords[vi] = ' '.join( "{:.4f}".format(val) for val in uvData[li].uv )
             allUVCoordsName.append( g + '.uvlayer' + str(uvSet))
             allUVCoords.append(uvCoords)
             uvSet+=1
@@ -227,7 +228,7 @@ def loadLibGeometries( lib_geometries ):
         for p in polygons:
             nal = numpy.asarray(p.normal)
             ni = len(triangleNormals)
-            triangleNormals.append(' '.join(str(val) for val in nal))
+            triangleNormals.append(' '.join( "{:.4f}".format(val) for val in nal))
             s = p.loop_start
             if(p.loop_total == 3):                             
                 triangles.append( loops[s+0].vertex_index)
