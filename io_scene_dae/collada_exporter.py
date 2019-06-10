@@ -94,11 +94,15 @@ def loadBonesTree( root, domNode, namebase ):
         else:        
             parentLocalMat = cb.parent.matrix_local.copy()
             parentLocalMat.invert()
+            # mat_to_armature = mat_parent * mat_local
+            # mat_parent_invert * mat_to_armature = mat_local
             localMat= parentLocalMat * cb.matrix_local
             matText = matrixToStrList(localMat, True)
             
             invBindMat = cb.matrix_local.copy()
             invBindMat.invert()
+            # invert_bind_mat = mat_to_armature_inverted
+            # invert_bind_mat = (mat_parent * mat_local).inverted = mat_local_inverted * mat_parent_inverted
             matInvText = matrixToStrList(invBindMat, True)
             
         matrix.text = matText
