@@ -73,9 +73,11 @@ def loadBonesTree( root, domNode, namebase ):
     domStack = []
     boneStack.append(root)
     domStack.append(domNode)
+    
     while len(boneStack) != 0:
         cb = boneStack.pop()
         dom = domStack.pop()
+        
         name = cb.name
         dom.set('id', namebase + '.' + name)
         dom.set('sid', name)
@@ -85,28 +87,18 @@ def loadBonesTree( root, domNode, namebase ):
         matrix.set('sid', 'LOCALBINDING')
         matrixInv = ET.SubElement(dom, 'matrix')
         matrixInv.set('sid', 'INVBINDING')
-        matText = ''
-        matInvText = ''
         
-        if(cb.parent == None):
-            matText = matrixToStrList(cb.matrix_local.copy(), True)
-            matInvText = matrixToStrList(Matrix.Identity(4), True)    
-        else:        
-            parentLocalMat = cb.parent.matrix_local.copy()
-            parentLocalMat.invert()
-            # mat_to_armature = mat_parent * mat_local
-            # mat_parent_invert * mat_to_armature = mat_local
-            localMat= parentLocalMat * cb.matrix_local
-            matText = matrixToStrList(localMat, True)
+        parentMatInv = Matrix.Identity(4)
+        if(cb.parent != None):
+            parentMatInv = cb.parent.matrix_local.copy()
+            parentMatInv.invert()
             
-            invBindMat = cb.matrix_local.copy()
-            invBindMat.invert()
-            # invert_bind_mat = mat_to_armature_inverted
-            # invert_bind_mat = (mat_parent * mat_local).inverted = mat_local_inverted * mat_parent_inverted
-            matInvText = matrixToStrList(invBindMat, True)
-            
-        matrix.text = matText
-        matrixInv.text = matInvText
+        localMat = cb.matrix_local.copy();
+        mat = parentMatInv * localMat
+        localMat.invert()
+        
+        matrix.text = matrixToStrList(mat, True)
+        matrixInv.text = matrixToStrList(localMat, True)
         for c in cb.children:
             dc = ET.SubElement(dom, 'node')
             boneStack.append(c)
@@ -119,7 +111,7 @@ def loadNodeArmature(obj, domNode):
     matNode.text = matText
     
     roots = []
-    bones = armature.bones;
+    bones = armature.bones
     for b in bones:
         if(b.parent == None):
             roots.append(b)
