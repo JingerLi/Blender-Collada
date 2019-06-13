@@ -28,6 +28,12 @@ class Param:
         self.name = n
         self.type = t
 
+class AnimeChs:
+    def __init__(self):
+        self.locChs = []
+        self.quatChs = []
+        self.scaleChs = []
+            
 def addInputBlock(domNode, semantic, source, offset=None):
     input = ET.SubElement(domNode, 'input')
     input.set('semantic', semantic)
@@ -309,7 +315,7 @@ def loadLibVisualScene( lib_visual_scene ):
         elif(obj.type == 'ARMATURE'):
             loadNodeArmature(obj, domNode)
 
-def buildAnimation( node, strip ):
+def buildAnimation( node, strip, armature ):
     if(strip == None):
         return;
     action = strip.action
@@ -323,59 +329,101 @@ def buildAnimation( node, strip ):
         print('Build sources and channels for vertices ' + str(len(fcurves)))
         print('Removing dead vertex is required.')
     elif (actionIDRoot == 'OBJECT'):
-        groups = action.groups
-        for grp in groups:
-            chs = grp.channels
-            timelineset = set()
-            for ch in chs:
-                kfpts = ch.keyframe_points
-                for kf in kfpts:
-                    timelineset.add(kf.co[0])
-            timeline = list(timelineset)
-            timeline.sort()
+        channels = action.fcurves
+        boneTimeSets = {}
+        boneTimelines = {}
+        boneAnimes = {}
+        for ch in channels:
+            rna = ch.data_path
+            f0 = rna.find('\"') + 1
+            f1 = rna.find('\"', f0)
+            boneName = rna[f0:f1]
+            locRotScalType = rna.split('.')[-1]
             
-            transMats = []
-            interpolation = []
-            for timePt in timeline:
-                translate = []
+            bone = armature.bones[boneName]
+               
+            if(boneName not in boneTimeSets):
+                boneTimeSets[boneName] = set()
+            kfpts = ch.keyframe_points
+            for kf in kfpts:
+                boneTimeSets[boneName].add(kf.co[0])
+                
+            if(boneName not in boneAnimes):
+                boneAnimes[boneName] = AnimeChs()
+            boneAnime = boneAnimes[boneName]
+            
+            if(locRotScalType == 'rotation_quaternion'):
+                boneAnime.quatChs.append(ch)
+            elif(locRotScalType == 'location'):
+                boneAnime.locChs.append(ch)
+            elif(locRotScalType == 'scale'):
+                boneAnime.scaleChs.append(ch)
+                     
+        boneFCurves = {}
+        boneInterpolations = {}
+        for bn in boneAnimes:
+            abone = armature.bones[bn]
+            connect = abone.use_connect
+            
+            timeline = list( boneTimeSets[bn])
+            timeline.sort()
+            boneTimelines[bn] = timeline
+            
+            boneAnime = boneAnimes[bn]
+            if(bn not in boneFCurves):
+                boneFCurves[bn] = []
+            boneMatStr = boneFCurves[bn]
+            
+            if(bn not in boneInterpolations):
+                boneInterpolations[bn] = []
+            boneInterpolation = boneInterpolations[bn]
+            
+            for tl in timeline:
+                location= []
                 quaternion = []
-                scaling = []
-                for ch in chs:
-                    type = ch.data_path.split('.')[-1]
-                    if( type == 'location'):
-                        translate.append(ch.evaluate(timePt))
-                    elif( type == 'rotation_quaternion'):
-                        quaternion.append(ch.evaluate(timePt))
-                    elif( type == 'scale'):
-                        scaling.append(ch.evaluate(timePt))
-                matLoc = Matrix.Identity(4) if len(translate) != 3 else Matrix.Translation( ( translate[0], translate[1], translate[2]) )
+                scale = []
+
+                if(not connect):
+                    for ch in boneAnime.locChs:
+                        location.append(ch.evaluate(tl))
+                for ch in boneAnime.quatChs:
+                    quaternion.append(ch.evaluate(tl))
+                for ch in boneAnime.scaleChs:
+                    scale.append(ch.evaluate(tl))
+                                 
+                matLoc = Matrix.Identity(4) if len(location) != 3 else Matrix.Translation( ( location[0], location[1], location[2]) )
                 matRot = Matrix.Identity(4) if len(quaternion) != 4 else Quaternion( (quaternion[0], quaternion[1], quaternion[2], quaternion[3]) ).to_matrix().to_4x4()
                 matScl = Matrix.Identity(4)
-                if( len(scaling) == 3):
-                    matScl[0][0] = scaling[0]
-                    matScl[1][1] = scaling[1]
-                    matScl[2][2] = scaling[2]
+                if( len(scale) == 3):
+                    matScl[0][0] = scale[0]
+                    matScl[1][1] = scale[1]
+                    matScl[2][2] = scale[2]
                     
                 mat =  matRot * matScl * matLoc
                 matStrs = matrixToStrList(mat, True)
-                transMats.append(matStrs)
-                interpolation.append('LINEAR')
-            timelineDatumName = grp.name + '.timeline'
-            datumTimeline = ' '.join(str(v) for v in timeline)
+                boneMatStr.append(matStrs)
+                boneInterpolation.append('LINEAR')
+            
+        for bn in boneFCurves:            
+            timeline = boneTimelines[bn]
+            timelineDatumName = bn + '.timeline'
+            datumTimeline = ' '.join( str(v) for v in timeline)
             buildSource(node, datumTimeline, len(timeline), timelineDatumName,
                 [ Param('TIME',DataType.float) ], SourceType.float_array)
-                
-            transformName = grp.name + '.transform'
+            
+            transMats = boneFCurves[bn]
+            transformName = bn + '.transform'
             datumTransform = ' '.join( v for v in transMats )
             buildSource(node, datumTransform, len(transMats) * 16, transformName,
                 [ Param('TRANSFORM',DataType.float4x4) ], SourceType.float_array)
-                
-            interpoName = grp.name + '.interpolation'
+            
+            interpolation = boneInterpolations[bn]
+            interpoName = bn + '.interpolation'
             datumInterpo = ' '.join( v for v in interpolation )
             buildSource(node, datumInterpo, len(interpolation), interpoName,
                 [ Param('INTERPOLATION',DataType.string) ], SourceType.Name_array)
-            
-            samplerID = grp.name + '.sampler'
+                
+            samplerID = bn + '.sampler'
             sampler = ET.SubElement(node, 'sampler')
             sampler.set('id', samplerID)
             addInputBlock(sampler, 'INPUT', '#' + timelineDatumName)
@@ -384,7 +432,7 @@ def buildAnimation( node, strip ):
             
             channel = ET.SubElement(node, 'channel')
             channel.set('source', '#' + samplerID)
-            channel.set('target', grp.name + '/transform')
+            channel.set('target', bn + '/transform')
 
 # DO NOT Support MESH animation yet.
 # ONLY support linear matrix interpolation for smaller file size.              
@@ -408,7 +456,7 @@ def loadLibAnimations(lib_animations):
                 traNode = ET.SubElement(lib_animations, 'animation')
                 traNode.set('id', objName + '.' + tra.name)
                 strip = tra.strips[0]
-                buildAnimation(traNode, strip)
+                buildAnimation(traNode, strip, obj.data)
             
 def prettify( root ):
     lvstack = []
